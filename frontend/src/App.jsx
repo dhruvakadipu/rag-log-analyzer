@@ -29,6 +29,7 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [ollamaOnline, setOllamaOnline] = useState(null);
+  const [aiMode, setAiMode] = useState('local'); // 'local' or 'cloud'
   const [toast, setToast] = useState(null);
 
   // Health check on mount
@@ -78,15 +79,33 @@ export default function App() {
             <div className="header-subtitle">Log Analysis · RAG · Local AI</div>
           </div>
           <div className="header-spacer" />
-          <div className="status-badge">
+          
+          <div className="ai-toggle-container">
+            <button 
+              className={`ai-toggle-btn ${aiMode === 'local' ? 'active' : ''}`}
+              onClick={() => setAiMode('local')}
+            >
+              Local
+            </button>
+            <button 
+              className={`ai-toggle-btn ${aiMode === 'cloud' ? 'active' : ''}`}
+              onClick={() => setAiMode('cloud')}
+            >
+              Cloud
+            </button>
+          </div>
+
+          <div className="status-badge" style={{ opacity: aiMode === 'local' ? 1 : 0.5 }}>
             <span
-              className={`status-dot ${ollamaOnline === true ? 'online' : ollamaOnline === false ? 'offline' : ''}`}
+              className={`status-dot ${aiMode === 'cloud' ? 'online' : (ollamaOnline === true ? 'online' : ollamaOnline === false ? 'offline' : '')}`}
             />
-            {ollamaOnline === true
-              ? 'Ollama online'
-              : ollamaOnline === false
-              ? 'Ollama offline'
-              : 'Checking...'}
+            {aiMode === 'cloud' 
+              ? 'Gemini online'
+              : (ollamaOnline === true
+                ? 'Ollama online'
+                : ollamaOnline === false
+                ? 'Ollama offline'
+                : 'Checking...')}
           </div>
         </header>
 
@@ -106,6 +125,7 @@ export default function App() {
             onToast={showToast}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
+            aiMode={aiMode}
           />
         </aside>
 
@@ -144,6 +164,7 @@ export default function App() {
               isLoading={isLoading}
               setIsLoading={setIsLoading}
               onToast={showToast}
+              aiMode={aiMode}
             />
           )}
         </main>

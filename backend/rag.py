@@ -5,6 +5,7 @@ RAG (Retrieval-Augmented Generation) pipeline using FAISS + Ollama.
 import os
 import json
 import requests
+import google.generativeai as genai
 from embedding import EmbeddingModel, build_faiss_index, search_index
 from utils import chunk_log, get_log_stats, read_log_file
 
@@ -13,7 +14,7 @@ from utils import chunk_log, get_log_stats, read_log_file
 # Ollama client — communicates with the local Ollama API
 # ---------------------------------------------------------------------------
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma:2b")
 
 SYSTEM_PROMPT = (
@@ -70,6 +71,25 @@ class OllamaClient:
             return False
 
 
+class GeminiClient:
+    """Client for Google Gemini API."""
+    def __init__(self):
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
+
+    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
+        if not self.api_key:
+            return "❌ GEMINI_API_KEY is not set. Please add it to your .env file to use Cloud mode."
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"❌ Gemini error: {str(e)}"
+
+
+
 # ---------------------------------------------------------------------------
 # RAG Store — in-memory document store with FAISS indices
 # ---------------------------------------------------------------------------
@@ -83,7 +103,13 @@ class RAGStore:
     def __init__(self):
         self.documents: dict = {}  # filename -> {chunks, index}
         self.embedder = EmbeddingModel.get_instance()
-        self.llm = OllamaClient()
+        self.ollama_client = OllamaClient()
+        self.gemini_client = GeminiClient()
+
+    def _get_llm(self, mode: str):
+        if mode == "cloud":
+            return self.gemini_client
+        return self.ollama_client
 
     def process_and_store(self, filename: str, filepath: str) -> dict:
         """
@@ -114,7 +140,7 @@ class RAGStore:
             "stats": stats,
         }
 
-    def query(self, filename: str, question: str, k: int = 5) -> dict:
+    def query(self, filename: str, question: str, mode: str = "local", k: int = 5) -> dict:
         """
         RAG query: embed the question, retrieve top-k chunks, generate answer.
         """
@@ -154,14 +180,15 @@ class RAGStore:
             f"Provide a detailed, technical answer. Reference specific log entries when possible."
         )
 
-        answer = self.llm.generate(prompt)
+        llm = self._get_llm(mode)
+        answer = llm.generate(prompt)
 
         return {
             "answer": answer,
             "sources": relevant_chunks,
         }
 
-    def summarize(self, filename: str) -> dict:
+    def summarize(self, filename: str, mode: str = "local") -> dict:
         """Generate a high-level summary of the log file."""
         if filename not in self.documents:
             return {"summary": f"File '{filename}' has not been processed yet."}
@@ -201,10 +228,11 @@ class RAGStore:
             f"LOG EXCERPTS:\n{context}"
         )
 
-        summary = self.llm.generate(prompt)
+        llm = self._get_llm(mode)
+        summary = llm.generate(prompt)
         return {"summary": summary, "stats": stats}
 
-    def compare(self, filename1: str, filename2: str) -> dict:
+    def compare(self, filename1: str, filename2: str, mode: str = "local") -> dict:
         """Compare two log files and highlight differences."""
         if filename1 not in self.documents:
             return {"comparison": f"File '{filename1}' has not been processed yet."}
@@ -250,7 +278,8 @@ class RAGStore:
             f"3. Common patterns and divergences"
         )
 
-        comparison = self.llm.generate(prompt)
+        llm = self._get_llm(mode)
+        comparison = llm.generate(prompt)
         return {
             "comparison": comparison,
             "stats1": stats1,

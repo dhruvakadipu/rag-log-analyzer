@@ -6,3 +6,5 @@ faiss-cpu
 numpy
 requests
 python-dotenv
+google-generativeai
+grpcio

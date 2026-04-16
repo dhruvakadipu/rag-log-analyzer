@@ -108,6 +108,37 @@ body {
 
 .header-spacer { flex: 1; }
 
+.ai-toggle-container {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px;
+  margin-right: 12px;
+}
+
+.ai-toggle-btn {
+  background: transparent;
+  border: none;
+  border-radius: 99px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ai-toggle-btn:hover {
+  color: var(--text-secondary);
+}
+
+.ai-toggle-btn.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
 .status-badge {
   display: flex;
   align-items: center;

@@ -3,7 +3,7 @@ import MessageBubble from './MessageBubble';
 
 const API = 'http://localhost:8000';
 
-export default function ChatInterface({ activeFile, fileData, messages, setMessages, isLoading, setIsLoading, onToast }) {
+export default function ChatInterface({ activeFile, fileData, messages, setMessages, isLoading, setIsLoading, onToast, aiMode }) {
   const [input, setInput] = useState('');
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -40,7 +40,7 @@ export default function ChatInterface({ activeFile, fileData, messages, setMessa
       const res = await fetch(`${API}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, filename: activeFile }),
+        body: JSON.stringify({ question, filename: activeFile, mode: aiMode }),
       });
       if (!res.ok) throw new Error('Failed to get answer');
       const data = await res.json();

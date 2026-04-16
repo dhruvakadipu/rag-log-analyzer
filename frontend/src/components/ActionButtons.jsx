@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 const API = 'http://localhost:8000';
 
-export default function ActionButtons({ activeFile, files, onResult, onToast, isLoading, setIsLoading }) {
+export default function ActionButtons({ activeFile, files, onResult, onToast, isLoading, setIsLoading, aiMode }) {
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareFile2, setCompareFile2] = useState('');
 
@@ -13,7 +13,7 @@ export default function ActionButtons({ activeFile, files, onResult, onToast, is
       const res = await fetch(`${API}/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: activeFile }),
+        body: JSON.stringify({ filename: activeFile, mode: aiMode }),
       });
       if (!res.ok) throw new Error('Summarize failed');
       const data = await res.json();
@@ -33,7 +33,7 @@ export default function ActionButtons({ activeFile, files, onResult, onToast, is
       const res = await fetch(`${API}/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename1: activeFile, filename2: compareFile2 }),
+        body: JSON.stringify({ filename1: activeFile, filename2: compareFile2, mode: aiMode }),
       });
       if (!res.ok) throw new Error('Comparison failed');
       const data = await res.json();

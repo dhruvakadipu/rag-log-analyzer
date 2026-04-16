@@ -43,15 +43,18 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class AskRequest(BaseModel):
     question: str
     filename: str
+    mode: str = "local"
 
 
 class SummarizeRequest(BaseModel):
     filename: str
+    mode: str = "local"
 
 
 class CompareRequest(BaseModel):
     filename1: str
     filename2: str
+    mode: str = "local"
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +122,7 @@ async def ask_question(request: AskRequest):
     if not request.filename.strip():
         raise HTTPException(status_code=400, detail="Filename is required.")
 
-    result = rag_store.query(request.filename, request.question)
+    result = rag_store.query(request.filename, request.question, mode=request.mode)
     return result
 
 
@@ -129,7 +132,7 @@ async def summarize_log(request: SummarizeRequest):
     if not request.filename.strip():
         raise HTTPException(status_code=400, detail="Filename is required.")
 
-    result = rag_store.summarize(request.filename)
+    result = rag_store.summarize(request.filename, mode=request.mode)
     return result
 
 
@@ -142,7 +145,7 @@ async def compare_logs(request: CompareRequest):
     if request.filename1 == request.filename2:
         raise HTTPException(status_code=400, detail="Please select two different files to compare.")
 
-    result = rag_store.compare(request.filename1, request.filename2)
+    result = rag_store.compare(request.filename1, request.filename2, mode=request.mode)
     return result
 
 
