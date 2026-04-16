@@ -1,0 +1,20 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+*.log
+
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/.env
+*.pyc
+
+# Data
+data/logs/*
+!data/logs/.keep
+data/logs/sample.log
+
+# OS
+.DS_Store
+Thumbs.db
