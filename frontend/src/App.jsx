@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import ChatInterface from './components/ChatInterface';
 import ActionButtons from './components/ActionButtons';
+import API from './config';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 function Toast({ toast, onClose }) {
   useEffect(() => {
@@ -79,15 +80,15 @@ export default function App() {
             <div className="header-subtitle">Log Analysis · RAG · Local AI</div>
           </div>
           <div className="header-spacer" />
-          
+
           <div className="ai-toggle-container">
-            <button 
+            <button
               className={`ai-toggle-btn ${aiMode === 'local' ? 'active' : ''}`}
               onClick={() => setAiMode('local')}
             >
               Local
             </button>
-            <button 
+            <button
               className={`ai-toggle-btn ${aiMode === 'cloud' ? 'active' : ''}`}
               onClick={() => setAiMode('cloud')}
             >
@@ -99,13 +100,13 @@ export default function App() {
             <span
               className={`status-dot ${aiMode === 'cloud' ? 'online' : (ollamaOnline === true ? 'online' : ollamaOnline === false ? 'offline' : '')}`}
             />
-            {aiMode === 'cloud' 
+            {aiMode === 'cloud'
               ? 'Gemini online'
               : (ollamaOnline === true
                 ? 'Ollama online'
                 : ollamaOnline === false
-                ? 'Ollama offline'
-                : 'Checking...')}
+                  ? 'Ollama offline'
+                  : 'Checking...')}
           </div>
         </header>
 

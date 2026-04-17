@@ -82,7 +82,7 @@ class GeminiClient:
         if not self.api_key:
             return "❌ GEMINI_API_KEY is not set. Please add it to your .env file to use Cloud mode."
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+            model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:

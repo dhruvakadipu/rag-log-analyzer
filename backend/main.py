@@ -23,9 +23,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
+origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+vercel_url = os.getenv("FRONTEND_URL")
+if vercel_url:
+    origins.append(vercel_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,16 +72,17 @@ class CompareRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint — also verifies Ollama connectivity."""
     ollama = OllamaClient()
     ollama_status = ollama.is_available()
+    gemini_key_set = os.getenv("GEMINI_API_KEY") is not None
+    
     return {
         "status": "ok",
         "ollama_connected": ollama_status,
-        "ollama_model": ollama.model,
+        "gemini_ready": gemini_key_set,
         "files_loaded": len(rag_store.documents),
     }
-
+    
 
 @app.post("/upload-log")
 async def upload_log(file: UploadFile = File(...)):
@@ -157,4 +167,5 @@ def list_files():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

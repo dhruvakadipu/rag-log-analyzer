@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import API from '../config';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 export default function ActionButtons({ activeFile, files, onResult, onToast, isLoading, setIsLoading, aiMode }) {
   const [showCompareModal, setShowCompareModal] = useState(false);

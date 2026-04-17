@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
+import API from '../config';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 export default function FileUpload({ files, activeFile, onFileSelect, onFilesChange, onToast }) {
   const [dragging, setDragging] = useState(false);

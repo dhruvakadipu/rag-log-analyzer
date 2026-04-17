@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
+import API from '../config';
 
-const API = 'http://localhost:8000';
+// const API = 'http://localhost:8000';
 
 export default function ChatInterface({ activeFile, fileData, messages, setMessages, isLoading, setIsLoading, onToast, aiMode }) {
   const [input, setInput] = useState('');
