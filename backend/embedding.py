@@ -52,7 +52,7 @@ class EmbeddingModel:
         if self.api_key:
             try:
                 result = genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/embedding-001",
                     content=texts,
                     task_type="retrieval_document"
                 )
