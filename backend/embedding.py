@@ -1,5 +1,5 @@
 """
-Cloud embedding model using Google Gemini API and FAISS index management.
+Hybrid embedding model supporting both Google Gemini (Cloud) and Sentence-Transformers (Local).
 """
 
 import os
@@ -9,8 +9,9 @@ import google.generativeai as genai
 
 class EmbeddingModel:
     """
-    Singleton-style embedding model that uses Google's text-embedding-004.
-    This saves memory by moving the embedding process to the cloud.
+    Hybrid embedding model. 
+    Uses Gemini Cloud by default if API key is present.
+    Falls back to Local Sentence-Transformers if offline or no key.
     """
 
     _instance = None
@@ -23,36 +24,55 @@ class EmbeddingModel:
 
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
+        self.local_model = None
+        
         if self.api_key:
             genai.configure(api_key=self.api_key)
+            print("[embedding] Gemini Cloud enabled.")
         else:
-            print("[warning] GEMINI_API_KEY not found. Embeddings will fail in Cloud mode.")
+            print("[embedding] GEMINI_API_KEY not found. Fallback to Local mode.")
+
+    def _get_local_model(self):
+        """Lazy load the local model only when actually needed to save RAM."""
+        if os.getenv("RENDER") or os.getenv("PORT"):
+            # Simple check for cloud environment to prevent RAM-based crashes
+            raise Exception("Local embedding model is disabled in Cloud environment to prevent memory issues. Please ensure GEMINI_API_KEY is valid.")
+            
+        if self.local_model is None:
+            from sentence_transformers import SentenceTransformer
+            print("[embedding] Loading local Sentence-Transformer (all-MiniLM-L6-v2)...")
+            self.local_model = SentenceTransformer("all-MiniLM-L6-v2")
+        return self.local_model
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """
-        Encode a list of texts into embeddings using Gemini API.
-        Returns numpy float32 array.
+        Encode texts using Cloud by default, with Local fallback.
         """
-        if not self.api_key:
-            # Fallback for local testing if no key provided, though it'll likely error later
-            return np.zeros((len(texts), self.dimension), dtype=np.float32)
+        # Try Cloud first if Key is present
+        if self.api_key:
+            try:
+                result = genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=texts,
+                    task_type="retrieval_document"
+                )
+                # Note: Gemini returns 768 or 3072 dims.
+                return np.array(result['embedding'], dtype=np.float32)
+            except Exception as e:
+                print(f"[embedding] Cloud failed: {e}. Attempting local fallback...")
 
-        try:
-            # Using text-embedding-004 (768 dimensions)
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=texts,
-                task_type="retrieval_document"
-            )
-            return np.array(result['embedding'], dtype=np.float32)
-        except Exception as e:
-            print(f"[embedding] Error during cloud encoding: {str(e)}")
-            # Return zeros as a safe fallback to prevent crash, though RAG will ignore it
-            return np.zeros((len(texts), self.dimension), dtype=np.float32)
+        # Local Fallback
+        model = self._get_local_model()
+        embeddings = model.encode(texts, show_progress_bar=False)
+        return np.array(embeddings, dtype=np.float32)
 
     @property
     def dimension(self) -> int:
-        return 768  # Gemini text-embedding-004 dimension
+        # We handle dynamic dimensions in the FAISS index builder
+        # but Gemini is typically 768 and MiniLM is 384.
+        if self.api_key:
+            return 768
+        return 384
 
 
 def build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
@@ -64,15 +84,13 @@ def build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
 
 
 def search_index(index: faiss.IndexFlatL2, query_embedding: np.ndarray, k: int = 5) -> tuple:
-    """
-    Search the FAISS index for top-k nearest neighbors.
-    """
+    """Search the FAISS index for top-k nearest neighbors."""
     if query_embedding.ndim == 1:
         query_embedding = query_embedding.reshape(1, -1)
     
-    # Ensure query embedding is the right dimension
+    # Check for dimension mismatch (e.g., if you switch modes mid-session)
     if query_embedding.shape[1] != index.d:
-        # This might happen if switching models mid-session
+        print(f"[embedding] Dimension mismatch: query({query_embedding.shape[1]}) vs index({index.d})")
         return np.array([], dtype=np.float32), np.array([], dtype=np.int64)
 
     distances, indices = index.search(query_embedding, k)
