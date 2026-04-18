@@ -55,18 +55,6 @@ export default function App() {
     setToast({ message, type, id: Date.now() });
   }
 
-  // Called when a summarize/compare result comes back — inject as AI message
-  function injectResult(content) {
-    if (!activeFile) return;
-    setChatHistory(prev => ({
-      ...prev,
-      [activeFile]: [
-        ...(prev[activeFile] || []),
-        { id: Date.now(), role: 'ai', content, timestamp: new Date().toISOString() },
-      ],
-    }));
-  }
-
   const activeFileData = files.find(f => f.filename === activeFile);
 
   return (
@@ -122,7 +110,7 @@ export default function App() {
           <ActionButtons
             activeFile={activeFile}
             files={files}
-            onResult={injectResult}
+            setMessages={setMessages}
             onToast={showToast}
             isLoading={isLoading}
             setIsLoading={setIsLoading}

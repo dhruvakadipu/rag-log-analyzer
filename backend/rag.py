@@ -1,9 +1,7 @@
-"""
-RAG (Retrieval-Augmented Generation) pipeline using FAISS + Ollama.
-"""
-
 import os
 import json
+import logging
+import time
 import requests
 import google.generativeai as genai
 from embedding import EmbeddingModel, build_faiss_index, search_index
@@ -32,17 +30,20 @@ class OllamaClient:
         self.base_url = base_url or OLLAMA_BASE_URL
         self.model = model or OLLAMA_MODEL
 
-    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
-        """Send a prompt to Ollama and return the generated text."""
+    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT, stream: bool = False) -> str:
+        """Send a prompt to Ollama and return the generated text (or a generator)."""
         url = f"{self.base_url}/api/generate"
         payload = {
             "model": self.model,
             "prompt": prompt,
             "system": system_prompt,
-            "stream": False,
+            "stream": stream,
         }
 
         try:
+            if stream:
+                return self._generate_stream(url, payload)
+            
             response = requests.post(url, json=payload, timeout=120)
             response.raise_for_status()
             result = response.json()
@@ -57,6 +58,20 @@ class OllamaClient:
             return "⏱️ Ollama request timed out. The model may be loading — please try again."
         except Exception as e:
             return f"❌ Ollama error: {str(e)}"
+
+    def _generate_stream(self, url, payload):
+        """Generator for Ollama streaming response."""
+        try:
+            with requests.post(url, json=payload, timeout=120, stream=True) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if line:
+                        chunk = json.loads(line)
+                        token = chunk.get("response", "")
+                        if token:
+                            yield token
+        except Exception as e:
+            yield f"\n[Error streaming from Ollama: {str(e)}]"
 
     def is_available(self) -> bool:
         """Check if Ollama is running and the model is available."""
@@ -75,18 +90,41 @@ class GeminiClient:
     """Client for Google Gemini API."""
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
+        self.last_request_time = 0
+        self.cooldown = 3 # seconds
         if self.api_key:
             genai.configure(api_key=self.api_key)
 
-    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
+    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT, stream: bool = False) -> str:
         if not self.api_key:
             return "❌ GEMINI_API_KEY is not set. Please add it to your .env file to use Cloud mode."
+        
+        # Rate limiting
+        elapsed = time.time() - self.last_request_time
+        if elapsed < self.cooldown:
+            time.sleep(self.cooldown - elapsed)
+        
+        self.last_request_time = time.time()
+
         try:
             model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
+            if stream:
+                return self._generate_stream(model, prompt)
+            
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
             return f"❌ Gemini error: {str(e)}"
+
+    def _generate_stream(self, model, prompt):
+        """Generator for Gemini streaming response."""
+        try:
+            response = model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"\n[Error streaming from Gemini: {str(e)}]"
 
 
 
@@ -140,151 +178,81 @@ class RAGStore:
             "stats": stats,
         }
 
-    def query(self, filename: str, question: str, mode: str = "local", k: int = 5) -> dict:
-        """
-        RAG query: embed the question, retrieve top-k chunks, generate answer.
-        """
+    def _stream_response(self, prompt: str, mode: str, sources: list = None):
+        """Helper to stream LLM response as JSON SSE events."""
+        llm = self._get_llm(mode)
+        
+        # Send sources first if they exist
+        if sources:
+            yield f"data: {json.dumps({'sources': sources, 'status': 'context_loaded'})}\n\n"
+
+        try:
+            for token in llm.generate(prompt, stream=True):
+                yield f"data: {json.dumps({'token': token, 'status': 'generating'})}\n\n"
+            
+            yield f"data: {json.dumps({'status': 'completed'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'status': 'error'})}\n\n"
+
+    def query_stream(self, filename: str, question: str, mode: str = "local", k: int = 5):
         if filename not in self.documents:
-            return {
-                "answer": f"File '{filename}' has not been processed yet. Please upload it first.",
-                "sources": [],
-            }
+            yield f"data: {json.dumps({'error': 'File not found'})}\n\n"
+            return
 
         doc = self.documents[filename]
-        chunks = doc["chunks"]
-        index = doc["index"]
-
         # Embed the question
         query_embedding = self.embedder.encode([question])
+        actual_k = min(k, len(doc["chunks"]))
+        distances, indices = search_index(doc["index"], query_embedding[0], k=actual_k)
 
-        # Retrieve top-k relevant chunks
-        actual_k = min(k, len(chunks))
-        distances, indices = search_index(index, query_embedding[0], k=actual_k)
-
-        # Gather relevant chunks
         relevant_chunks = []
         for i, idx in enumerate(indices):
-            if idx < len(chunks):
+            if idx < len(doc["chunks"]):
                 relevant_chunks.append({
-                    "text": chunks[idx],
+                    "text": doc["chunks"][idx],
                     "distance": float(distances[i]),
                     "index": int(idx),
                 })
 
-        # Build the prompt with context
         context = "\n---\n".join([rc["text"] for rc in relevant_chunks])
         prompt = (
             f"Based on the following log excerpts, answer the user's question.\n\n"
             f"LOG CONTEXT:\n{context}\n\n"
             f"USER QUESTION: {question}\n\n"
-            f"Provide a detailed, technical answer. Reference specific log entries when possible."
+            f"Provide a detailed, technical answer."
         )
 
-        llm = self._get_llm(mode)
-        answer = llm.generate(prompt)
+        return self._stream_response(prompt, mode, sources=relevant_chunks)
 
-        return {
-            "answer": answer,
-            "sources": relevant_chunks,
-        }
-
-    def summarize(self, filename: str, mode: str = "local") -> dict:
-        """Generate a high-level summary of the log file."""
+    def summarize_stream(self, filename: str, mode: str = "local"):
         if filename not in self.documents:
-            return {"summary": f"File '{filename}' has not been processed yet."}
+            yield f"data: {json.dumps({'error': 'File not found'})}\n\n"
+            return
 
         doc = self.documents[filename]
-        chunks = doc["chunks"]
-        stats = doc["stats"]
-
-        # Use a representative sample of chunks (first, middle, last + error chunks)
-        sample_chunks = []
-        if len(chunks) <= 10:
-            sample_chunks = chunks
-        else:
-            # First 3, last 3, and up to 4 with errors/warnings
-            sample_chunks = chunks[:3] + chunks[-3:]
-            for c in chunks:
-                if any(kw in c.upper() for kw in ["ERROR", "WARNING"]):
-                    if c not in sample_chunks:
-                        sample_chunks.append(c)
-                    if len(sample_chunks) >= 12:
-                        break
-
+        sample_chunks = doc["chunks"][:3] + doc["chunks"][-3:]
         context = "\n---\n".join(sample_chunks)
-        stats_str = (
-            f"Total lines: {stats['total_lines']}, "
-            f"Errors: {stats['error']}, "
-            f"Warnings: {stats['warning']}, "
-            f"Info: {stats['info']}"
-        )
+        stats = doc["stats"]
+        stats_str = f"Lines: {stats['total_lines']}, Errors: {stats['error']}, Warnings: {stats['warning']}"
 
         prompt = (
-            f"Summarize the following system log. Provide:\n"
-            f"1. A brief overview of what the system was doing\n"
-            f"2. Key issues and errors found\n"
-            f"3. Recommendations for the engineering team\n\n"
-            f"LOG STATISTICS: {stats_str}\n\n"
+            f"Summarize this system log. Stats: {stats_str}\n\n"
             f"LOG EXCERPTS:\n{context}"
         )
+        return self._stream_response(prompt, mode)
 
-        llm = self._get_llm(mode)
-        summary = llm.generate(prompt)
-        return {"summary": summary, "stats": stats}
+    def compare_stream(self, filename1: str, filename2: str, mode: str = "local"):
+        if filename1 not in self.documents or filename2 not in self.documents:
+            yield f"data: {json.dumps({'error': 'One or both files not found'})}\n\n"
+            return
 
-    def compare(self, filename1: str, filename2: str, mode: str = "local") -> dict:
-        """Compare two log files and highlight differences."""
-        if filename1 not in self.documents:
-            return {"comparison": f"File '{filename1}' has not been processed yet."}
-        if filename2 not in self.documents:
-            return {"comparison": f"File '{filename2}' has not been processed yet."}
-
-        doc1 = self.documents[filename1]
-        doc2 = self.documents[filename2]
-
-        stats1 = doc1["stats"]
-        stats2 = doc2["stats"]
-
-        # Sample chunks from each file
-        sample1 = doc1["chunks"][:5]
-        sample2 = doc2["chunks"][:5]
-
-        # Include error/warning chunks
-        for c in doc1["chunks"]:
-            if any(kw in c.upper() for kw in ["ERROR", "WARNING"]) and c not in sample1:
-                sample1.append(c)
-                if len(sample1) >= 8:
-                    break
-
-        for c in doc2["chunks"]:
-            if any(kw in c.upper() for kw in ["ERROR", "WARNING"]) and c not in sample2:
-                sample2.append(c)
-                if len(sample2) >= 8:
-                    break
-
+        doc1, doc2 = self.documents[filename1], self.documents[filename2]
         prompt = (
-            f"Compare these two log files and identify differences:\n\n"
-            f"=== FILE 1: {filename1} ===\n"
-            f"Stats: Lines={stats1['total_lines']}, Errors={stats1['error']}, "
-            f"Warnings={stats1['warning']}\n"
-            f"Sample entries:\n" + "\n".join(sample1) + "\n\n"
-            f"=== FILE 2: {filename2} ===\n"
-            f"Stats: Lines={stats2['total_lines']}, Errors={stats2['error']}, "
-            f"Warnings={stats2['warning']}\n"
-            f"Sample entries:\n" + "\n".join(sample2) + "\n\n"
-            f"Provide:\n"
-            f"1. Key differences between the two logs\n"
-            f"2. Which log indicates more severe issues\n"
-            f"3. Common patterns and divergences"
+            f"Compare {filename1} and {filename2}.\n\n"
+            f"FILE 1 Stats: {doc1['stats']}\n"
+            f"FILE 2 Stats: {doc2['stats']}\n"
         )
-
-        llm = self._get_llm(mode)
-        comparison = llm.generate(prompt)
-        return {
-            "comparison": comparison,
-            "stats1": stats1,
-            "stats2": stats2,
-        }
+        return self._stream_response(prompt, mode)
 
     def get_files(self) -> list[dict]:
         """Return list of all processed files with their stats."""

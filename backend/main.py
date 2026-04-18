@@ -4,12 +4,31 @@ FastAPI backend for the Engineering Copilot for Log Analysis.
 
 import os
 import shutil
+import logging
+import json
+import time
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Logging Setup
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("backend.log")
+    ]
+)
+logger = logging.getLogger("log-copilot")
+logger.info("Initializing Log Analysis Copilot Backend...")
+
 
 from rag import rag_store, OllamaClient
 
@@ -132,8 +151,12 @@ async def ask_question(request: AskRequest):
     if not request.filename.strip():
         raise HTTPException(status_code=400, detail="Filename is required.")
 
-    result = rag_store.query(request.filename, request.question, mode=request.mode)
-    return result
+    logger.info(f"Question for {request.filename} (mode={request.mode}): {request.question}")
+    
+    return StreamingResponse(
+        rag_store.query_stream(request.filename, request.question, mode=request.mode),
+        media_type="text/event-stream"
+    )
 
 
 @app.post("/summarize")
@@ -142,8 +165,12 @@ async def summarize_log(request: SummarizeRequest):
     if not request.filename.strip():
         raise HTTPException(status_code=400, detail="Filename is required.")
 
-    result = rag_store.summarize(request.filename, mode=request.mode)
-    return result
+    logger.info(f"Summarize request for {request.filename} (mode={request.mode})")
+    
+    return StreamingResponse(
+        rag_store.summarize_stream(request.filename, mode=request.mode),
+        media_type="text/event-stream"
+    )
 
 
 @app.post("/compare")
@@ -155,8 +182,12 @@ async def compare_logs(request: CompareRequest):
     if request.filename1 == request.filename2:
         raise HTTPException(status_code=400, detail="Please select two different files to compare.")
 
-    result = rag_store.compare(request.filename1, request.filename2, mode=request.mode)
-    return result
+    logger.info(f"Compare request: {request.filename1} vs {request.filename2} (mode={request.mode})")
+    
+    return StreamingResponse(
+        rag_store.compare_stream(request.filename1, request.filename2, mode=request.mode),
+        media_type="text/event-stream"
+    )
 
 
 @app.get("/files")

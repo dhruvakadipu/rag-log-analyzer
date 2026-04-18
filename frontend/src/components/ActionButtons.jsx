@@ -1,24 +1,45 @@
 import { useState } from 'react';
 import API from '../config';
+import { handleStream } from '../utils/streaming';
 
 // const API = 'http://localhost:8000';
 
-export default function ActionButtons({ activeFile, files, onResult, onToast, isLoading, setIsLoading, aiMode }) {
+export default function ActionButtons({ activeFile, files, setMessages, onToast, isLoading, setIsLoading, aiMode }) {
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareFile2, setCompareFile2] = useState('');
 
   async function handleSummarize() {
     if (!activeFile || isLoading) return;
     setIsLoading(true);
+    
+    // Create placeholder message in chat
+    const aiMessageId = Date.now();
+    setMessages(prev => [...prev, {
+      id: aiMessageId,
+      role: 'ai',
+      content: `📋 **Log Summary for \`${activeFile}\`**\n\n`,
+      timestamp: new Date().toISOString()
+    }]);
+
     try {
       const res = await fetch(`${API}/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: activeFile, mode: aiMode }),
       });
+
       if (!res.ok) throw new Error('Summarize failed');
-      const data = await res.json();
-      onResult(`📋 **Log Summary for \`${activeFile}\`**\n\n${data.summary}`);
+
+      await handleStream(
+        res,
+        (token) => {
+          setMessages(prev => prev.map(m => 
+            m.id === aiMessageId ? { ...m, content: m.content + token } : m
+          ));
+        },
+        () => {}, // metadata not needed here for now
+        (error) => onToast(error, 'error')
+      );
     } catch (err) {
       onToast(err.message, 'error');
     } finally {
@@ -30,15 +51,35 @@ export default function ActionButtons({ activeFile, files, onResult, onToast, is
     if (!activeFile || !compareFile2 || isLoading) return;
     setShowCompareModal(false);
     setIsLoading(true);
+
+    // Create placeholder message in chat
+    const aiMessageId = Date.now();
+    setMessages(prev => [...prev, {
+      id: aiMessageId,
+      role: 'ai',
+      content: `🔍 **Log Comparison: \`${activeFile}\` vs \`${compareFile2}\`**\n\n`,
+      timestamp: new Date().toISOString()
+    }]);
+
     try {
       const res = await fetch(`${API}/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename1: activeFile, filename2: compareFile2, mode: aiMode }),
       });
+
       if (!res.ok) throw new Error('Comparison failed');
-      const data = await res.json();
-      onResult(`🔍 **Log Comparison: \`${activeFile}\` vs \`${compareFile2}\`**\n\n${data.comparison}`);
+
+      await handleStream(
+        res,
+        (token) => {
+          setMessages(prev => prev.map(m => 
+            m.id === aiMessageId ? { ...m, content: m.content + token } : m
+          ));
+        },
+        () => {}, // metadata not needed here
+        (error) => onToast(error, 'error')
+      );
     } catch (err) {
       onToast(err.message, 'error');
     } finally {

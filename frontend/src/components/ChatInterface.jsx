@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import API from '../config';
+import { handleStream } from '../utils/streaming';
 
 // const API = 'http://localhost:8000';
 
@@ -34,8 +35,20 @@ export default function ChatInterface({ activeFile, fileData, messages, setMessa
       content: question,
       timestamp: new Date().toISOString(),
     };
+    
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
+
+    // Create a placeholder for the AI message
+    const aiMessageId = Date.now() + 1;
+    const aiMsgPlaceholder = {
+      id: aiMessageId,
+      role: 'ai',
+      content: '',
+      sources: [],
+      timestamp: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, aiMsgPlaceholder]);
 
     try {
       const res = await fetch(`${API}/ask`, {
@@ -43,25 +56,33 @@ export default function ChatInterface({ activeFile, fileData, messages, setMessa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, filename: activeFile, mode: aiMode }),
       });
-      if (!res.ok) throw new Error('Failed to get answer');
-      const data = await res.json();
 
-      const aiMsg = {
-        id: Date.now() + 1,
-        role: 'ai',
-        content: data.answer,
-        sources: data.sources || [],
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, aiMsg]);
+      if (!res.ok) throw new Error('Failed to get answer');
+
+      await handleStream(
+        res,
+        (token) => {
+          setMessages(prev => prev.map(m => 
+            m.id === aiMessageId ? { ...m, content: m.content + token } : m
+          ));
+        },
+        (metadata) => {
+          if (metadata.sources) {
+            setMessages(prev => prev.map(m => 
+              m.id === aiMessageId ? { ...m, sources: metadata.sources } : m
+            ));
+          }
+        },
+        (error) => {
+          onToast(error, 'error');
+        }
+      );
+
     } catch (err) {
       onToast(err.message, 'error');
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        role: 'ai',
-        content: '❌ Failed to get a response. Make sure Ollama is running.',
-        timestamp: new Date().toISOString(),
-      }]);
+      setMessages(prev => prev.map(m => 
+        m.id === aiMessageId ? { ...m, content: '❌ Error: ' + err.message } : m
+      ));
     } finally {
       setIsLoading(false);
     }
