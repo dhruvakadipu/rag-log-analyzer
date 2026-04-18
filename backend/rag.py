@@ -4,6 +4,7 @@ import logging
 import time
 import requests
 from google import genai
+import config
 from embedding import EmbeddingModel, build_faiss_index, search_index
 from utils import chunk_log, get_log_stats, read_log_file
 
@@ -12,26 +13,17 @@ from utils import chunk_log, get_log_stats, read_log_file
 # Ollama client — communicates with the local Ollama API
 # ---------------------------------------------------------------------------
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma:2b")
-
-SYSTEM_PROMPT = (
-    "You are a highly skilled systems debugging assistant. "
-    "Analyze logs carefully and provide precise, technical, and actionable insights. "
-    "Focus on identifying root causes, anomalies, and performance issues. "
-    "Avoid generic responses."
-)
-
 
 class OllamaClient:
     """Client for the local Ollama REST API."""
 
     def __init__(self, base_url: str = None, model: str = None):
-        self.base_url = base_url or OLLAMA_BASE_URL
-        self.model = model or OLLAMA_MODEL
+        self.base_url = base_url or config.OLLAMA_BASE_URL
+        self.model = model or config.OLLAMA_MODEL
 
-    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT, stream: bool = False) -> str:
+    def generate(self, prompt: str, system_prompt: str = None, stream: bool = False) -> str:
         """Send a prompt to Ollama and return the generated text (or a generator)."""
+        system_prompt = system_prompt or config.SYSTEM_PROMPT
         url = f"{self.base_url}/api/generate"
         payload = {
             "model": self.model,
@@ -91,14 +83,16 @@ class GeminiClient:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.last_request_time = 0
-        self.cooldown = 3 # seconds
+        self.cooldown = config.GEMINI_COOLDOWN
         self.client = None
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
 
-    def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT, stream: bool = False) -> str:
+    def generate(self, prompt: str, system_prompt: str = None, stream: bool = False) -> str:
         if not self.client:
             return "❌ GEMINI_API_KEY is not set or client failed to initialize."
+        
+        system_prompt = system_prompt or config.SYSTEM_PROMPT
         
         # Rate limiting
         elapsed = time.time() - self.last_request_time
@@ -115,21 +109,21 @@ class GeminiClient:
                 return self._generate_stream(prompt, config)
             
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash',
+                model=config.GEMINI_MODEL,
                 contents=prompt,
-                config=config
+                config=config_sdk
             )
             return response.text
         except Exception as e:
             return f"❌ Gemini (GenAI) error: {str(e)}"
 
-    def _generate_stream(self, prompt, config):
+    def _generate_stream(self, prompt, config_sdk):
         """Generator for Gemini streaming response using new SDK."""
         try:
             for chunk in self.client.models.generate_content_stream(
-                model='gemini-2.0-flash',
+                model=config.GEMINI_MODEL,
                 contents=prompt,
-                config=config
+                config=config_sdk
             ):
                 if chunk.text:
                     yield chunk.text
@@ -165,7 +159,7 @@ class RAGStore:
         Returns metadata about the processed file.
         """
         content = read_log_file(filepath)
-        chunks = chunk_log(content, max_chars=200)
+        chunks = chunk_log(content, max_chars=config.CHUNK_SIZE)
         stats = get_log_stats(content)
 
         if not chunks:
@@ -204,7 +198,9 @@ class RAGStore:
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e), 'status': 'error'})}\n\n"
 
-    def query_stream(self, filename: str, question: str, mode: str = "local", k: int = 5):
+    def query_stream(self, filename: str, question: str, mode: str = None, k: int = None):
+        mode = mode or config.DEFAULT_AI_MODE
+        k = k or config.TOP_K
         if filename not in self.documents:
             yield f"data: {json.dumps({'error': 'File not found'})}\n\n"
             return
@@ -234,7 +230,8 @@ class RAGStore:
 
         return self._stream_response(prompt, mode, sources=relevant_chunks)
 
-    def summarize_stream(self, filename: str, mode: str = "local"):
+    def summarize_stream(self, filename: str, mode: str = None):
+        mode = mode or config.DEFAULT_AI_MODE
         if filename not in self.documents:
             yield f"data: {json.dumps({'error': 'File not found'})}\n\n"
             return
@@ -251,7 +248,8 @@ class RAGStore:
         )
         return self._stream_response(prompt, mode)
 
-    def compare_stream(self, filename1: str, filename2: str, mode: str = "local"):
+    def compare_stream(self, filename1: str, filename2: str, mode: str = None):
+        mode = mode or config.DEFAULT_AI_MODE
         if filename1 not in self.documents or filename2 not in self.documents:
             yield f"data: {json.dumps({'error': 'One or both files not found'})}\n\n"
             return

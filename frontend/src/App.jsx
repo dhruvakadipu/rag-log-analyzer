@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import ChatInterface from './components/ChatInterface';
 import ActionButtons from './components/ActionButtons';
-import API from './config';
+import API, { DEFAULT_AI_MODE, TOAST_TIMEOUT } from './config';
 
 // const API = 'http://localhost:8000';
 
 function Toast({ toast, onClose }) {
   useEffect(() => {
-    const t = setTimeout(onClose, 4000);
+    const t = setTimeout(onClose, TOAST_TIMEOUT);
     return () => clearTimeout(t);
   }, [onClose]);
 
@@ -30,7 +30,7 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [ollamaOnline, setOllamaOnline] = useState(null);
-  const [aiMode, setAiMode] = useState('local'); // 'local' or 'cloud'
+  const [aiMode, setAiMode] = useState(DEFAULT_AI_MODE); // 'local' or 'cloud'
   const [toast, setToast] = useState(null);
 
   // Health check on mount

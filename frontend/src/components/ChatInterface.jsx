@@ -168,7 +168,7 @@ export default function ChatInterface({ activeFile, fileData, messages, setMessa
           </button>
         </div>
         <div className="input-hint">
-          Enter to send · Shift+Enter for new line · Powered by Ollama + FAISS
+          Enter to send · Shift+Enter for new line · Powered by {aiMode === 'cloud' ? 'Gemini 2.0 Flash' : 'Ollama + FAISS'}
         </div>
       </div>
     </div>

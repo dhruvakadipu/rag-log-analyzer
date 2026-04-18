@@ -1,11 +1,18 @@
 fastapi
 uvicorn[standard]
 gunicorn
+
+# API utils
 python-multipart
-sentence-transformers
-faiss-cpu
-numpy
-requests
 python-dotenv
+requests
+
+# ML / RAG (CPU optimized)
+numpy
+faiss-cpu
+scikit-learn
+
+# Embeddings / LLM
+sentence-transformers
 google-genai
 grpcio

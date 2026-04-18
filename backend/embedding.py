@@ -2,6 +2,7 @@ import os
 import numpy as np
 import faiss
 from google import genai
+import config
 
 class EmbeddingModel:
     """
@@ -37,8 +38,8 @@ class EmbeddingModel:
             
         if self.local_model is None:
             from sentence_transformers import SentenceTransformer
-            print("[embedding] Loading local Sentence-Transformer (all-MiniLM-L6-v2)...")
-            self.local_model = SentenceTransformer("all-MiniLM-L6-v2")
+            print(f"[embedding] Loading local Sentence-Transformer ({config.LOCAL_EMBEDDING_MODEL})...")
+            self.local_model = SentenceTransformer(config.LOCAL_EMBEDDING_MODEL)
         return self.local_model
 
     def encode(self, texts: list[str]) -> np.ndarray:
@@ -50,7 +51,7 @@ class EmbeddingModel:
             try:
                 # New SDK: contents is used for multiple inputs
                 result = self.client.models.embed_content(
-                    model="text-embedding-004",
+                    model=config.GEMINI_EMBEDDING_MODEL,
                     contents=texts
                 )
                 
@@ -82,8 +83,9 @@ def build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
     return index
 
 
-def search_index(index: faiss.IndexFlatL2, query_embedding: np.ndarray, k: int = 5) -> tuple:
+def search_index(index: faiss.IndexFlatL2, query_embedding: np.ndarray, k: int = None) -> tuple:
     """Search the FAISS index for top-k nearest neighbors."""
+    k = k or config.TOP_K
     if query_embedding.ndim == 1:
         query_embedding = query_embedding.reshape(1, -1)
     

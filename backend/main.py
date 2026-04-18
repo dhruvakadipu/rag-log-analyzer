@@ -11,9 +11,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
-
-load_dotenv()
+import config
 
 # ---------------------------------------------------------------------------
 # Logging Setup
@@ -47,9 +45,8 @@ origins = [
     "http://localhost:3000",
 ]
 
-vercel_url = os.getenv("FRONTEND_URL")
-if vercel_url:
-    origins.append(vercel_url)
+if config.FRONTEND_URL:
+    origins.append(config.FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,23 +68,33 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class AskRequest(BaseModel):
     question: str
     filename: str
-    mode: str = "local"
+    mode: str = config.DEFAULT_AI_MODE
 
 
 class SummarizeRequest(BaseModel):
     filename: str
-    mode: str = "local"
+    mode: str = config.DEFAULT_AI_MODE
 
 
 class CompareRequest(BaseModel):
     filename1: str
     filename2: str
-    mode: str = "local"
+    mode: str = config.DEFAULT_AI_MODE
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@app.get("/")
+async def root():
+    """Root endpoint to confirm API is running."""
+    return {
+        "message": "Log Analysis Copilot API is online",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
 
 @app.get("/health")
 def health_check():
@@ -198,5 +205,4 @@ def list_files():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=config.PORT, reload=False)
