@@ -1,8 +1,11 @@
 import os
 import numpy as np
 import faiss
+import logging
 from google import genai
 import config
+
+logger = logging.getLogger("log-copilot.embedding")
 
 class EmbeddingModel:
     """
@@ -26,9 +29,9 @@ class EmbeddingModel:
         
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
-            print("[embedding] Gemini Cloud (google-genai) enabled.")
+            logger.info("Gemini Cloud (google-genai) enabled.")
         else:
-            print("[embedding] GEMINI_API_KEY not found. Fallback to Local mode.")
+            logger.warning("GEMINI_API_KEY not found. Fallback to Local mode.")
 
     def _get_local_model(self):
         """Lazy load the local model only when actually needed to save RAM."""
@@ -40,7 +43,7 @@ class EmbeddingModel:
             
         if self.local_model is None:
             from sentence_transformers import SentenceTransformer
-            print(f"[embedding] Loading local Sentence-Transformer ({config.LOCAL_EMBEDDING_MODEL})...")
+            logger.info(f"Loading local Sentence-Transformer ({config.LOCAL_EMBEDDING_MODEL})...")
             self.local_model = SentenceTransformer(config.LOCAL_EMBEDDING_MODEL)
         return self.local_model
 
@@ -61,7 +64,7 @@ class EmbeddingModel:
                 embeddings = [e.values for e in result.embeddings]
                 return np.array(embeddings, dtype=np.float32)
             except Exception as e:
-                print(f"[embedding] Cloud failed: {e}. Attempting local fallback...")
+                logger.error(f"Cloud embedding failed: {e}. Attempting local fallback...")
 
         # Local Fallback
         model = self._get_local_model()
@@ -93,7 +96,7 @@ def search_index(index: faiss.IndexFlatL2, query_embedding: np.ndarray, k: int =
     
     # Check for dimension mismatch (e.g., if you switch modes mid-session)
     if query_embedding.shape[1] != index.d:
-        print(f"[embedding] Dimension mismatch: query({query_embedding.shape[1]}) vs index({index.d})")
+        logger.error(f"Dimension mismatch: query({query_embedding.shape[1]}) vs index({index.d})")
         return np.array([], dtype=np.float32), np.array([], dtype=np.int64)
 
     distances, indices = index.search(query_embedding, k)

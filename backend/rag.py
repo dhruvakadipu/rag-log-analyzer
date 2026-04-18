@@ -8,6 +8,8 @@ import config
 from embedding import EmbeddingModel, build_faiss_index, search_index
 from utils import chunk_log, get_log_stats, read_log_file
 
+logger = logging.getLogger("log-copilot.rag")
+
 
 # ---------------------------------------------------------------------------
 # Ollama client — communicates with the local Ollama API
