@@ -3,7 +3,7 @@ import json
 import logging
 import time
 import requests
-import google.generativeai as genai
+from google import genai
 from embedding import EmbeddingModel, build_faiss_index, search_index
 from utils import chunk_log, get_log_stats, read_log_file
 
@@ -87,17 +87,18 @@ class OllamaClient:
 
 
 class GeminiClient:
-    """Client for Google Gemini API."""
+    """Client for Google Gemini API (using new google-genai SDK)."""
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.last_request_time = 0
         self.cooldown = 3 # seconds
+        self.client = None
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            self.client = genai.Client(api_key=self.api_key)
 
     def generate(self, prompt: str, system_prompt: str = SYSTEM_PROMPT, stream: bool = False) -> str:
-        if not self.api_key:
-            return "❌ GEMINI_API_KEY is not set. Please add it to your .env file to use Cloud mode."
+        if not self.client:
+            return "❌ GEMINI_API_KEY is not set or client failed to initialize."
         
         # Rate limiting
         elapsed = time.time() - self.last_request_time
@@ -106,25 +107,34 @@ class GeminiClient:
         
         self.last_request_time = time.time()
 
+        # Config for system prompt in new SDK
+        config = {"system_instruction": system_prompt}
+
         try:
-            model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
             if stream:
-                return self._generate_stream(model, prompt)
+                return self._generate_stream(prompt, config)
             
-            response = model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt,
+                config=config
+            )
             return response.text
         except Exception as e:
-            return f"❌ Gemini error: {str(e)}"
+            return f"❌ Gemini (GenAI) error: {str(e)}"
 
-    def _generate_stream(self, model, prompt):
-        """Generator for Gemini streaming response."""
+    def _generate_stream(self, prompt, config):
+        """Generator for Gemini streaming response using new SDK."""
         try:
-            response = model.generate_content(prompt, stream=True)
-            for chunk in response:
+            for chunk in self.client.models.generate_content_stream(
+                model='gemini-2.0-flash',
+                contents=prompt,
+                config=config
+            ):
                 if chunk.text:
                     yield chunk.text
         except Exception as e:
-            yield f"\n[Error streaming from Gemini: {str(e)}]"
+            yield f"\n[Error streaming from Gemini (GenAI): {str(e)}]"
 
 
 

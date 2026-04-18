@@ -1,11 +1,7 @@
-"""
-Hybrid embedding model supporting both Google Gemini (Cloud) and Sentence-Transformers (Local).
-"""
-
 import os
 import numpy as np
 import faiss
-import google.generativeai as genai
+from google import genai
 
 class EmbeddingModel:
     """
@@ -25,10 +21,11 @@ class EmbeddingModel:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.local_model = None
+        self.client = None
         
         if self.api_key:
-            genai.configure(api_key=self.api_key)
-            print("[embedding] Gemini Cloud enabled.")
+            self.client = genai.Client(api_key=self.api_key)
+            print("[embedding] Gemini Cloud (google-genai) enabled.")
         else:
             print("[embedding] GEMINI_API_KEY not found. Fallback to Local mode.")
 
@@ -49,15 +46,17 @@ class EmbeddingModel:
         Encode texts using Cloud by default, with Local fallback.
         """
         # Try Cloud first if Key is present
-        if self.api_key:
+        if self.client:
             try:
-                result = genai.embed_content(
-                    model="models/embedding-001",
-                    content=texts,
-                    task_type="retrieval_document"
+                # New SDK: contents is used for multiple inputs
+                result = self.client.models.embed_content(
+                    model="text-embedding-004",
+                    contents=texts
                 )
-                # Note: Gemini returns 768 or 3072 dims.
-                return np.array(result['embedding'], dtype=np.float32)
+                
+                # result.embeddings is a list of Embedding objects
+                embeddings = [e.values for e in result.embeddings]
+                return np.array(embeddings, dtype=np.float32)
             except Exception as e:
                 print(f"[embedding] Cloud failed: {e}. Attempting local fallback...")
 
