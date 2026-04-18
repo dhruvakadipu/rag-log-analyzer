@@ -11,17 +11,23 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
+from logging.handlers import RotatingFileHandler
 import config
 
 # ---------------------------------------------------------------------------
 # Logging Setup
 # ---------------------------------------------------------------------------
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, config.LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("backend.log")
+        # Rotate logs after 5MB, keep 5 backup files
+        RotatingFileHandler(
+            "backend.log", 
+            maxBytes=config.MAX_LOG_SIZE_MB * 1024 * 1024, 
+            backupCount=config.LOG_BACKUP_COUNT
+        )
     ]
 )
 logger = logging.getLogger("log-copilot")
