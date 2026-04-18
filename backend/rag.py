@@ -158,15 +158,22 @@ class RAGStore:
         Read a log file, chunk it, embed the chunks, and store in FAISS.
         Returns metadata about the processed file.
         """
+        logger.info(f"--- Processing Log: {filename} ---")
         content = read_log_file(filepath)
         chunks = chunk_log(content, max_chars=config.CHUNK_SIZE)
         stats = get_log_stats(content)
 
+        logger.info(f"Extracted {stats['total_lines']} lines into {len(chunks)} chunks.")
+
         if not chunks:
+            logger.warning(f"No chunks created for {filename}.")
             return {"filename": filename, "chunk_count": 0, "stats": stats}
 
         # Generate embeddings and build index
+        logger.info(f"Generating embeddings for {len(chunks)} chunks...")
         embeddings = self.embedder.encode(chunks)
+        
+        logger.info("Building FAISS index...")
         index = build_faiss_index(embeddings)
 
         self.documents[filename] = {
@@ -176,6 +183,7 @@ class RAGStore:
             "filepath": filepath,
         }
 
+        logger.info(f"✓ Processing complete for {filename}.")
         return {
             "filename": filename,
             "chunk_count": len(chunks),

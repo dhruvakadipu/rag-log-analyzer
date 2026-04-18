@@ -32,7 +32,9 @@ class EmbeddingModel:
 
     def _get_local_model(self):
         """Lazy load the local model only when actually needed to save RAM."""
-        if os.getenv("RENDER") or os.getenv("PORT"):
+        is_cloud = os.getenv("RENDER") == "true" or os.getenv("ENVIRONMENT") == "cloud"
+        
+        if is_cloud:
             # Simple check for cloud environment to prevent RAM-based crashes
             raise Exception("Local embedding model is disabled in Cloud environment to prevent memory issues. Please ensure GEMINI_API_KEY is valid.")
             
