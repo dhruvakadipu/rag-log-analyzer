@@ -35,6 +35,49 @@
   --transition-slow: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ─── Light Mode ─────────────────────────────────────────────────────────── */
+[data-theme='light'] {
+  --bg-primary:    #f8fafc;
+  --bg-secondary:  #f1f5f9;
+  --bg-panel:      #ffffff;
+  --bg-hover:      rgba(15, 23, 42, 0.05);
+
+  --text-primary:  #0f172a;
+  --text-secondary:#475569;
+  --text-muted:    #94a3b8;
+
+  --border:        rgba(15, 23, 42, 0.08);
+  --border-accent: rgba(0, 212, 255, 0.4);
+
+  --shadow-glow: 0 0 40px rgba(0, 212, 255, 0.08);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='light'] .app-header {
+  background: rgba(255, 255, 255, 0.85);
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='light'] .sidebar {
+  background: #f1f5f9;
+}
+
+[data-theme='light'] .bubble.ai {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+[data-theme='light'] .chat-header,
+[data-theme='light'] .chat-input-area {
+  background: rgba(248, 250, 252, 0.8);
+}
+
+[data-theme='light'] .message.ai .message-avatar {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -80,15 +123,38 @@ body {
 }
 
 .header-logo {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background: var(--accent-grad);
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
   flex-shrink: 0;
+  box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.header-logo::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
+  transform: rotate(45deg);
+  animation: logo-shimmer 3s infinite;
+}
+
+@keyframes logo-shimmer {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) rotate(45deg); }
 }
 
 .header-title {
@@ -137,6 +203,27 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.theme-toggle {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: var(--transition);
+  font-size: 16px;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
 }
 
 .status-badge {
@@ -198,18 +285,28 @@ body {
 
 /* ─── Upload Zone ────────────────────────────────────────────────────────── */
 .upload-zone {
+  display: block;
   border: 1.5px dashed var(--border);
   border-radius: var(--radius-md);
-  padding: 20px 12px;
+  padding: 24px 16px;
   text-align: center;
   cursor: pointer;
   transition: var(--transition);
   position: relative;
+  background: rgba(255, 255, 255, 0.01);
+  will-change: transform;
 }
 
 .upload-zone:hover, .upload-zone.drag-over {
   border-color: var(--accent-cyan);
-  background: rgba(0, 212, 255, 0.05);
+  border-style: solid;
+  background: rgba(0, 212, 255, 0.04);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.upload-zone:active {
+  transform: translateY(0);
 }
 
 .upload-zone input { display: none; }

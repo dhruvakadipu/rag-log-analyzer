@@ -1,5 +1,5 @@
 """
-FastAPI backend for the Engineering Copilot for Log Analysis.
+FastAPI backend for Logly - Ask your logs anything.
 """
 
 import os
@@ -40,10 +40,54 @@ from rag import rag_store, OllamaClient
 # App setup
 # ---------------------------------------------------------------------------
 
+import contextlib
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP ---
+    logger.info("--- SYSTEM STARTUP: MODEL CHECK ---")
+    
+    # 1. Check Ollama
+    ollama = OllamaClient()
+    ollama_info = ollama.get_health_status()
+    if ollama_info["online"]:
+        if ollama_info["model_found"]:
+            logger.info(f"[OK]  Ollama:        ONLINE (Model '{ollama_info['model_name']}' is ready)")
+        else:
+            logger.warning(f"[!]   Ollama:        ONLINE (But model '{ollama_info['model_name']}' is missing!)")
+            logger.warning(f"      Action: Run 'ollama pull {ollama_info['model_name']}'")
+    else:
+        logger.warning(f"[X]   Ollama:        OFFLINE (Ensure 'ollama serve' is running at {config.OLLAMA_BASE_URL})")
+
+    # 2. Check Gemini
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        logger.info(f"[OK]  Gemini Cloud:  READY (Model '{config.GEMINI_MODEL}')")
+    else:
+        logger.info(f"[-]   Gemini Cloud:  NOT CONFIGURED (Cloud mode disabled)")
+
+    # 3. Check Embedding Model
+    try:
+        from embedding import EmbeddingModel
+        _ = EmbeddingModel.get_instance()
+        
+        embed_label = "Cloud" if gemini_key else "Local"
+        embed_model = config.GEMINI_EMBEDDING_MODEL if gemini_key else config.LOCAL_EMBEDDING_MODEL
+        logger.info(f"[OK]  Embeddings:    READY ({embed_label} Model '{embed_model}')")
+    except Exception as e:
+        logger.error(f"[X]   Embeddings:    ERROR loading embeddings: {e}")
+    
+    logger.info("------------------------------------")
+    
+    yield
+    # --- SHUTDOWN (Optional) ---
+    logger.info("Shutting down Logly...")
+
 app = FastAPI(
-    title="Log Analysis Copilot",
+    title="Logly",
     description="AI-powered log analysis using local LLM (Ollama) and RAG",
     version="1.0.0",
+    lifespan=lifespan
 )
 
 origins = [
@@ -107,12 +151,12 @@ async def root():
 @app.get("/health")
 def health_check():
     ollama = OllamaClient()
-    ollama_status = ollama.is_available()
+    ollama_info = ollama.get_health_status()
     gemini_key_set = os.getenv("GEMINI_API_KEY") is not None
     
     return {
         "status": "ok",
-        "ollama_connected": ollama_status,
+        "ollama": ollama_info,
         "gemini_ready": gemini_key_set,
         "files_loaded": len(rag_store.documents),
     }

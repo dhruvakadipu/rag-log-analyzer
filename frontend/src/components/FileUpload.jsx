@@ -71,9 +71,10 @@ export default function FileUpload({ files, activeFile, onFileSelect, onFilesCha
             onChange={onInputChange}
             disabled={uploading}
           />
-          <span className="upload-icon">📂</span>
+          <span className="upload-icon">📁</span>
           <div className="upload-text">
-            <strong>Drop a log file</strong> or click to browse
+            <strong>Drop a log file</strong><br/>
+            <span>or click to browse</span>
           </div>
           <div className="upload-hint">.log · .txt supported</div>
           {uploading && (

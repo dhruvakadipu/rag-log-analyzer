@@ -32,14 +32,32 @@ export default function App() {
   const [ollamaOnline, setOllamaOnline] = useState(null);
   const [aiMode, setAiMode] = useState(DEFAULT_AI_MODE); // 'local' or 'cloud'
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
-  // Health check on mount
-  useEffect(() => {
+  const checkHealth = () => {
     fetch(`${API}/health`)
       .then(r => r.json())
-      .then(d => setOllamaOnline(d.ollama_connected))
-      .catch(() => setOllamaOnline(false));
-  }, []);
+      .then(d => setOllamaOnline(d.ollama)) // Set the whole object
+      .catch(() => setOllamaOnline({ online: false }));
+  };
+
+  // Consolidated health management: 
+  // Runs on mount and whenever aiMode changes (to be snappy), then polls every 30s.
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000); 
+    return () => clearInterval(interval);
+  }, [aiMode]);
+
+  // Sync theme to body attribute
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }
 
   const messages = activeFile ? (chatHistory[activeFile] || []) : [];
 
@@ -62,12 +80,16 @@ export default function App() {
       <div className="app-shell">
         {/* ── Header ── */}
         <header className="app-header">
-          <div className="header-logo">🔍</div>
+          <div className="header-logo">L</div>
           <div>
-            <div className="header-title">Engineering Copilot</div>
-            <div className="header-subtitle">Log Analysis · RAG · Local AI</div>
+            <div className="header-title">Logly</div>
+            <div className="header-subtitle">Ask your logs anything.</div>
           </div>
           <div className="header-spacer" />
+
+          <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
 
           <div className="ai-toggle-container">
             <button
@@ -86,15 +108,17 @@ export default function App() {
 
           <div className="status-badge" style={{ opacity: aiMode === 'local' ? 1 : 0.5 }}>
             <span
-              className={`status-dot ${aiMode === 'cloud' ? 'online' : (ollamaOnline === true ? 'online' : ollamaOnline === false ? 'offline' : '')}`}
+              className={`status-dot ${aiMode === 'cloud' ? 'online' : (ollamaOnline?.online && ollamaOnline?.model_found ? 'online' : (ollamaOnline?.online === false || ollamaOnline?.model_found === false) ? 'offline' : '')}`}
             />
             {aiMode === 'cloud'
               ? 'Gemini online'
-              : (ollamaOnline === true
+              : (ollamaOnline?.online === true && ollamaOnline?.model_found === true
                 ? 'Ollama online'
-                : ollamaOnline === false
+                : (ollamaOnline?.online === false
                   ? 'Ollama offline'
-                  : 'Checking...')}
+                  : ollamaOnline?.model_found === false
+                    ? 'Model missing'
+                    : 'Checking...'))}
           </div>
         </header>
 
@@ -122,25 +146,57 @@ export default function App() {
         <main className="main-panel">
           {!activeFile ? (
             <div className="empty-state">
-              <span className="empty-icon">🚀</span>
+              <span className="empty-icon">🔍</span>
               <div className="empty-title">Upload a log to get started</div>
               <div className="empty-desc">
                 Drop a <strong>.log</strong> or <strong>.txt</strong> file in the sidebar.
                 The AI will index it and answer your debugging questions instantly.
               </div>
-              {ollamaOnline === false && (
+              {aiMode === 'local' && (ollamaOnline?.online === false || ollamaOnline?.model_found === false) && (
                 <div style={{
                   marginTop: '16px',
-                  padding: '12px 18px',
+                  padding: '16px 20px',
                   background: 'rgba(255,77,109,0.1)',
                   border: '1px solid rgba(255,77,109,0.3)',
                   borderRadius: 'var(--radius-md)',
-                  fontSize: '12px',
+                  fontSize: '13px',
                   color: 'var(--error-color)',
-                  maxWidth: '360px',
-                  lineHeight: '1.7',
+                  maxWidth: '420px',
+                  lineHeight: '1.6',
+                  textAlign: 'left'
                 }}>
-                  ⚠️ <strong>Ollama not detected.</strong> Run <code>ollama serve</code> and make sure <code>gemma:2b</code> is pulled.
+                  <div style={{ fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚠️ {ollamaOnline.online === false ? 'Ollama not detected' : 'Model not found'}
+                  </div>
+                  {ollamaOnline.online === false ? (
+                    <ul style={{ margin: '0', paddingLeft: '18px' }}>
+                      <li>Run <code>ollama serve</code> in your terminal.</li>
+                      <li>Ensure Ollama is accessible at <code>http://localhost:11434</code>.</li>
+                      <li>Check if the Ollama application is running in the background.</li>
+                    </ul>
+                  ) : (
+                    <ul style={{ margin: '0', paddingLeft: '18px' }}>
+                      <li>The model <code>{ollamaOnline.model_name}</code> is not pulled.</li>
+                      <li>Run <code>ollama pull {ollamaOnline.model_name}</code> in your terminal.</li>
+                    </ul>
+                  )}
+                  <div style={{ marginTop: '12px' }}>
+                    <button 
+                      onClick={checkHealth}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,77,109,0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                    >
+                      🔄 Retry Connection
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

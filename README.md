@@ -1,6 +1,6 @@
-# 🔍 Engineering Copilot — Log Analysis
+# 🚀 Logly — Ask your logs anything.
 
-An AI-powered local web app that helps engineers debug system logs using a **RAG (Retrieval-Augmented Generation)** pipeline. Fully offline — no API keys required.
+An AI-powered local web app that helps engineers debug system logs using a **RAG (Retrieval-Augmented Generation)** pipeline.
 
 **Stack**: FastAPI · React · Ollama (`gemma:2b`) · sentence-transformers · FAISS
 

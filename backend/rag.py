@@ -67,17 +67,38 @@ class OllamaClient:
         except Exception as e:
             yield f"\n[Error streaming from Ollama: {str(e)}]"
 
-    def is_available(self) -> bool:
-        """Check if Ollama is running and the model is available."""
+    def get_health_status(self) -> dict:
+        """Return detailed health status: service up/down and model presence."""
         try:
-            resp = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            resp = requests.get(f"{self.base_url}/api/tags", timeout=10)
             resp.raise_for_status()
             models = resp.json().get("models", [])
-            available = [m.get("name", "") for m in models]
-            # Check if the model (or a variant of it) is available
-            return any(self.model in name for name in available)
-        except Exception:
-            return False
+            available_names = [m.get("name", "") for m in models]
+            
+            # Check for exact match or 'gemma:2b' vs 'gemma:2b:latest'
+            # We check if self.model (e.g. 'gemma:2b') is in any of the names
+            model_found = any(self.model in name for name in available_names)
+            
+            # If not found by substring, try stripping ':latest' if it was added automatically by Ollama
+            if not model_found:
+                model_found = any(name.split(':')[0] == self.model.split(':')[0] for name in available_names)
+
+            return {
+                "online": True,
+                "model_found": model_found,
+                "model_name": self.model,
+                "available": available_names,
+                "error": None
+            }
+        except requests.ConnectionError:
+            return {"online": False, "model_found": False, "model_name": self.model, "error": "ConnectionError"}
+        except Exception as e:
+            return {"online": False, "model_found": False, "model_name": self.model, "error": str(e)}
+
+    def is_available(self) -> bool:
+        """Check if Ollama is running and the model is available."""
+        status = self.get_health_status()
+        return status["online"] and status["model_found"]
 
 
 class GeminiClient:
