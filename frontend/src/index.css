@@ -866,3 +866,118 @@ body {
 .markdown code { font-family: 'JetBrains Mono', monospace; background: rgba(0, 0, 0, 0.2); padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
 .markdown pre { background: var(--bg-primary); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); overflow-x: auto; }
 .markdown pre code { background: none; padding: 0; }
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  transition: var(--transition);
+}
+
+.mobile-overlay {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  
+  .mobile-menu-btn {
+    display: block;
+  }
+  
+  .sidebar {
+    position: fixed;
+    top: 60px; /* Header height */
+    bottom: 0;
+    left: -300px;
+    width: 300px;
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-panel);
+  }
+  
+  .sidebar.open {
+    transform: translateX(300px);
+  }
+  
+  .mobile-overlay {
+    display: block;
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 90;
+    animation: fade-in 0.3s ease;
+  }
+  
+  .header-subtitle {
+    display: none;
+  }
+
+  .app-header {
+    padding: 0 16px;
+    gap: 10px;
+  }
+  
+  .header-logo {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+  }
+  
+  .ai-toggle-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  
+  .message-content {
+    max-width: 85%;
+  }
+  
+  .modal {
+    width: 90vw;
+    padding: 16px;
+  }
+  
+  .empty-state {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-badge span.status-text {
+    display: none;
+  }
+  
+  .status-badge {
+    border: none;
+    padding: 0;
+  }
+  
+  .status-dot {
+    margin-right: 0;
+  }
+  
+  .message-content {
+    max-width: 90%;
+  }
+}

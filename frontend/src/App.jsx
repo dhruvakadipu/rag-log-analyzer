@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FileUpload from './components/FileUpload';
 import ChatInterface from './components/ChatInterface';
 import ActionButtons from './components/ActionButtons';
@@ -33,6 +33,51 @@ export default function App() {
   const [aiMode, setAiMode] = useState(DEFAULT_AI_MODE); // 'local' or 'cloud'
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  async function handleMainUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['log', 'txt'].includes(ext)) {
+      showToast('Only .log and .txt files are supported.', 'error');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/upload-log`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Upload failed');
+      }
+      const data = await res.json();
+      setFiles(prev => {
+        const exists = prev.find(f => f.filename === data.filename);
+        if (exists) return prev.map(f => f.filename === data.filename ? data : f);
+        return [...prev, data];
+      });
+      handleFileSelect(data.filename);
+      showToast(`✓ ${data.filename} processed — ${data.chunk_count} chunks`, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  }
+
+  function handleFileSelect(filename) {
+    setActiveFile(filename);
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  }
 
   const checkHealth = () => {
     fetch(`${API}/health`)
@@ -80,6 +125,9 @@ export default function App() {
       <div className="app-shell">
         {/* ── Header ── */}
         <header className="app-header">
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            ☰
+          </button>
           <div className="header-logo">L</div>
           <div>
             <div className="header-title">Logly</div>
@@ -110,26 +158,27 @@ export default function App() {
             <span
               className={`status-dot ${aiMode === 'cloud' ? 'online' : (ollamaOnline?.online && ollamaOnline?.model_found ? 'online' : (ollamaOnline?.online === false || ollamaOnline?.model_found === false) ? 'offline' : '')}`}
             />
-            {aiMode === 'cloud'
-              ? 'Gemini online'
-              : (ollamaOnline?.online === true && ollamaOnline?.model_found === true
-                ? 'Ollama online'
-                : (ollamaOnline?.online === false
-                  ? 'Ollama offline'
-                  : ollamaOnline?.model_found === false
-                    ? 'Model missing'
-                    : 'Checking...'))}
+            <span className="status-text">
+              {aiMode === 'cloud'
+                ? 'Gemini online'
+                : (ollamaOnline?.online === true && ollamaOnline?.model_found === true
+                  ? 'Ollama online'
+                  : (ollamaOnline?.online === false
+                    ? 'Ollama offline'
+                    : ollamaOnline?.model_found === false
+                      ? 'Model missing'
+                      : 'Checking...'))}
+            </span>
           </div>
         </header>
 
         {/* ── Sidebar ── */}
-        <aside className="sidebar">
+        {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <FileUpload
             files={files}
             activeFile={activeFile}
-            onFileSelect={setActiveFile}
-            onFilesChange={setFiles}
-            onToast={showToast}
+            onFileSelect={handleFileSelect}
           />
           <ActionButtons
             activeFile={activeFile}
@@ -147,10 +196,27 @@ export default function App() {
           {!activeFile ? (
             <div className="empty-state">
               <span className="empty-icon">🔍</span>
-              <div className="empty-title">Upload a log to get started</div>
+              <div className="empty-title">Ready to analyze your logs?</div>
               <div className="empty-desc">
-                Drop a <strong>.log</strong> or <strong>.txt</strong> file in the sidebar.
+                Upload a <strong>.log</strong> or <strong>.txt</strong> file below.
                 The AI will index it and answer your debugging questions instantly.
+              </div>
+              <div style={{ marginTop: '24px' }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  accept=".log,.txt"
+                  onChange={handleMainUpload}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || (aiMode === 'local' && (ollamaOnline?.online === false || ollamaOnline?.model_found === false))}
+                  style={{ width: 'auto', padding: '12px 24px', fontSize: '14px', borderRadius: 'var(--radius-md)', margin: '0 auto' }}
+                >
+                  {isUploading ? 'Uploading...' : '📁 Upload Log File'}
+                </button>
               </div>
               {aiMode === 'local' && (ollamaOnline?.online === false || ollamaOnline?.model_found === false) && (
                 <div style={{
