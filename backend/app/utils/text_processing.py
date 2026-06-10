@@ -5,14 +5,12 @@ Utility functions for log file reading, chunking, and classification.
 import os
 import re
 
-
 def read_log_file(filepath: str) -> str:
     """Read and return the contents of a log file."""
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Log file not found: {filepath}")
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
-
 
 def chunk_log(content: str, max_chars: int = 200) -> list[str]:
     """
@@ -28,7 +26,6 @@ def chunk_log(content: str, max_chars: int = 200) -> list[str]:
         if not line:
             continue
 
-        # If adding this line would exceed max_chars, finalize the current chunk
         if current_chunk and len(current_chunk) + len(line) + 1 > max_chars:
             chunks.append(current_chunk)
             current_chunk = line
@@ -38,12 +35,10 @@ def chunk_log(content: str, max_chars: int = 200) -> list[str]:
             else:
                 current_chunk = line
 
-    # Don't forget the last chunk
     if current_chunk:
         chunks.append(current_chunk)
 
     return chunks
-
 
 def classify_line(line: str) -> str:
     """Classify a log line as ERROR, WARNING, or INFO."""
@@ -53,7 +48,6 @@ def classify_line(line: str) -> str:
     elif re.search(r"\[?\s*WARNING\s*\]?", line_upper) or re.search(r"\[?\s*WARN\s*\]?", line_upper):
         return "WARNING"
     return "INFO"
-
 
 def get_log_stats(content: str) -> dict:
     """Count ERROR, WARNING, and INFO lines in log content."""

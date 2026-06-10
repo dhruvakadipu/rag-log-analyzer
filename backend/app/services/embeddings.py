@@ -1,11 +1,9 @@
-import os
 import numpy as np
 import faiss
-import logging
 from google import genai
-import config
 
-logger = logging.getLogger("log-copilot.embedding")
+from app.core.config import settings
+from app.core.logging import logger
 
 class EmbeddingModel:
     """
@@ -23,7 +21,7 @@ class EmbeddingModel:
         return cls._instance
 
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.api_key = settings.gemini_api_key
         self.local_model = None
         self.client = None
         
@@ -35,50 +33,38 @@ class EmbeddingModel:
 
     def _get_local_model(self):
         """Lazy load the local model only when actually needed to save RAM."""
-        is_cloud = os.getenv("RENDER") == "true" or os.getenv("ENVIRONMENT") == "cloud"
+        is_cloud = settings.environment == "cloud"
         
         if is_cloud:
-            # Simple check for cloud environment to prevent RAM-based crashes
             raise Exception("Local embedding model is disabled in Cloud environment to prevent memory issues. Please ensure GEMINI_API_KEY is valid.")
             
         if self.local_model is None:
             from sentence_transformers import SentenceTransformer
-            logger.info(f"Loading local Sentence-Transformer ({config.LOCAL_EMBEDDING_MODEL})...")
-            self.local_model = SentenceTransformer(config.LOCAL_EMBEDDING_MODEL)
+            logger.info(f"Loading local Sentence-Transformer ({settings.local_embedding_model})...")
+            self.local_model = SentenceTransformer(settings.local_embedding_model)
         return self.local_model
 
     def encode(self, texts: list[str]) -> np.ndarray:
-        """
-        Encode texts using Cloud by default, with Local fallback.
-        """
-        # Try Cloud first if Key is present
         if self.client:
             try:
-                # New SDK: contents is used for multiple inputs
                 result = self.client.models.embed_content(
-                    model=config.GEMINI_EMBEDDING_MODEL,
+                    model=settings.gemini_embedding_model,
                     contents=texts
                 )
-                
-                # result.embeddings is a list of Embedding objects
                 embeddings = [e.values for e in result.embeddings]
                 return np.array(embeddings, dtype=np.float32)
             except Exception as e:
                 logger.error(f"Cloud embedding failed: {e}. Attempting local fallback...")
 
-        # Local Fallback
         model = self._get_local_model()
         embeddings = model.encode(texts, show_progress_bar=False)
         return np.array(embeddings, dtype=np.float32)
 
     @property
     def dimension(self) -> int:
-        # We handle dynamic dimensions in the FAISS index builder
-        # but Gemini is typically 768 and MiniLM is 384.
         if self.api_key:
             return 768
         return 384
-
 
 def build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
     """Create a FAISS L2 index from a numpy array of embeddings."""
@@ -87,14 +73,12 @@ def build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
     index.add(embeddings)
     return index
 
-
 def search_index(index: faiss.IndexFlatL2, query_embedding: np.ndarray, k: int = None) -> tuple:
     """Search the FAISS index for top-k nearest neighbors."""
-    k = k or config.TOP_K
+    k = k or settings.top_k
     if query_embedding.ndim == 1:
         query_embedding = query_embedding.reshape(1, -1)
     
-    # Check for dimension mismatch (e.g., if you switch modes mid-session)
     if query_embedding.shape[1] != index.d:
         logger.error(f"Dimension mismatch: query({query_embedding.shape[1]}) vs index({index.d})")
         return np.array([], dtype=np.float32), np.array([], dtype=np.int64)

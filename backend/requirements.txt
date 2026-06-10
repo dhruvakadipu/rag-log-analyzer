@@ -15,4 +15,4 @@ scikit-learn
 # Embeddings / LLM
 sentence-transformers
 google-genai
-grpcio
+pydantic-settings
